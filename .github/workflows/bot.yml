@@ -1,0 +1,47 @@
+name: reddit-to-telegram
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"     # every 5 minutes (GitHub minimum; runs may be delayed)
+  workflow_dispatch:           # manual "Run workflow" button in the Actions tab
+
+permissions:
+  contents: write              # needed to commit seen.json back to the repo
+
+concurrency:
+  group: reddit-to-telegram
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch new posts and send to Telegram
+        run: python bot.py --once
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+          USER_AGENT: ${{ vars.USER_AGENT || 'python:glr-telegram-bot:v1.0' }}
+          FIRST_RUN_POST: ${{ vars.FIRST_RUN_POST || '3' }}
+          ALLOWED_FLAIRS: ${{ vars.ALLOWED_FLAIRS }}
+          MIN_SCORE: ${{ vars.MIN_SCORE || '0' }}
+
+      - name: Save seen.json
+        run: |
+          if [ -n "$(git status --porcelain seen.json)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add seen.json
+            git commit -m "update seen posts [skip ci]"
+            git pull --rebase
+            git push
+          fi
